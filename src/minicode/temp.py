@@ -1,7 +1,3 @@
-MINICODE_KEY = LjfG_AnIGJVNmd581TFuQaJ9lTI_oG42v4fy7fIKUV8
-MINICODE_MODEL = Qwen/Qwen2.5-14B-Instruct-AWQ
-MINICODE_URL = https://llm.liaufms.org/v1/qwen2-5-14b-instruct-awq
-
 from openai import OpenAI
 from dotenv import load_dotenv
 import os, json, re, inspect, requests
