@@ -74,7 +74,6 @@ class Validator():
     self.current = target
     return self.current
 
-# TODO métodos de validação pra cada transição
   def start_to_received(self) -> State:
     if self.current != State.START:
       raise RuntimeError(f"Estado atual inválido: {self.current.value}")
@@ -86,3 +85,7 @@ class Validator():
       raise RuntimeError(f"Não foi possível validar a API: {health.value}")
 
     return self.transition(State.RECEIVED)
+
+  def received_to_specified(self): ...
+
+# TODO métodos de validação pra cada transição
