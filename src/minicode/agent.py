@@ -9,7 +9,7 @@ from minicode.orchestrator import fsm
 
 load_dotenv()
 
-# Definindo o modelo
+# ----- DEFININDO O MODELO -----
 client = OpenAI(base_url=os.getenv('MINICODE_URL'), api_key=os.getenv('MINICODE_KEY'))
 # message = [{'role': 'user', 'content': 'Hi'}]
 
@@ -32,6 +32,10 @@ def chat_simple(messages):
   return resp.choices[0].message.content
 
 
+# ----- DEFININDO CONTROLADORES -----
+validator = fsm.Validator(client)
+
+
 # ----- AGENT LOOP -----
 SYSTEM = """You are an agent designed for coding assistance through counseling, code
 reading and tool calling."""
@@ -40,24 +44,27 @@ def agent(task, tools=None, max_steps=8, confirm=None, verbose=None, system=None
   # tool schema
   msgs = [{"role": "system", "content": (system or SYSTEM)},
           {"role": "user", "content": task}]
-  state = fsm.State.START
   
   # last_tool, repeat = None, 0 # guarda contra repetição de chamadas de ferramenta idênticas
   for t in range(1, max_steps + 1):
     
-    if state == fsm.State.START:
+    if validator.current == fsm.State.START:
     # raw = chat(msgs, tools) # more to add, response format
     # first step of communication, collect response in "raw"
+      validator.start_to_received()
       raw = chat_simple(msgs)
       msgs += [{"role": "assistant", "content": raw}] # add said response to the whole context
-      state = fsm.transition(state, fsm.State.RECEIVED)
-      # TODO validate this transition. Maybe the API is down, for example. Need to check if the message reached the LLM and returned
-      # TODO se não der certo, vai pra FAILED?
 
+    elif validator.current != fsm.State.START and validator.current in fsm.State:
+      return raw # resposta final
+      continue
+
+    else:
+      raise RuntimeError("Estado inválido.")
     # if not, continue processing, retro-feeding the model
     # feedback = chat_simple(msgs)
 
-    elif state == fsm.State.RECEIVED:
+    '''elif state == fsm.State.RECEIVED:
       # state = 
     elif state == fsm.State.SPECIFIED:
       # state = create_and_validate_plan()
@@ -74,16 +81,9 @@ def agent(task, tools=None, max_steps=8, confirm=None, verbose=None, system=None
     elif state = fsm.State.DONE: # Qual a abordagem correta? Como misturar as duas?
       # determine the action taken by the model, and return if said action is the final answer to the problem
           #if action["tool"] == "answer":
-          #  return action["arguments"].get("text", "")
-      return return raw # resposta final
-  
+          #  return action["arguments"].get("text", "")'''
   raise RuntimeError("Max number of iterations reached.")
 #    action = json.loads(raw)
 #    if verbose
-
-def teste():
-  return 1
-
-TESTE = {"teste": {"fn": teste, "doc": "just a test tool", "params": "nothing"}}
 
 print(agent("Who are you?"))
