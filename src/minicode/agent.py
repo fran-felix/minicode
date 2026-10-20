@@ -42,28 +42,39 @@ class MyAgent:
             {"role": "user", "content": task}]
     inst = "Esperando instruções, não faça nada."
     plan = "Não há um plano de ação, aguarde."
+    answer = None
     
     # last_tool, repeat = None, 0 # guarda contra repetição de chamadas de ferramenta idênticas
     for t in range(1, max_steps + 1):
       
       #if validator.current == fsm.State.START:
-      if validator.start_to_received():
+      if validator.start_to_received(): # RECEIVED: mensagem chegou ao servidor e o modelo está funcional
       # first step of communication, collect response in "raw"
       # raw = self.chat(msgs, tools) # more to add, response format
         raw = self.chat_simple(msgs)
         msgs += [{"role": "assistant", "content": raw}] # retroalimentar a resposta ao modelo
 
-      #elif validator.current != fsm.State.START and validator.current in fsm.State:
-      elif validator.received_to_specified():
+      elif validator.received_to_specified(): # SPECIFIED: modelo recebeu a tarefa e devolveu a primeira resposta, proceder com raciocínio e planejar
         # instrução adicional para direcionar o modelo
         inst = "Agora que sei o que devo fazer, preciso planejar um passo a passo para concluir a solução com base nas ferramentas que tenho á disposição."
         msgs += [{"role": "assistant", "content": inst}]
         plan = self.chat_simple(msgs)
 
-      elif validator.specified_to_planned():
-        
+      elif validator.specified_to_planned(): # PLANNED: modelo devolveu um plano válido, começar a implementação
+
         return raw # resposta final
 
+      # IMPLEMENTING: executar a implementação planejada após uma certificação do usuário
+
+      # VERIFYING: testar o código feito
+
+      # REPAIRING:
+
+      # FAILED? provavelmente vai ser um erro, não um estado de fato, embora esteja no código para permitir transições.
+      # outra opção é devolver que o modelo não é capaz de resolver tal tarefa. É, provavelmente isso.
+
+      elif validator.done(): # DONE: modelo concluiu a tarefa com sucesso, a resposta pode ser devolvida ao usuário
+        return answer
 
       else:
         raise RuntimeError("Estado inválido.")
@@ -88,6 +99,7 @@ class MyAgent:
         # determine the action taken by the model, and return if said action is the final answer to the problem
             #if action["tool"] == "answer":
             #  return action["arguments"].get("text", "")'''
+      
     raise RuntimeError("Max number of iterations reached.")
   #    action = json.loads(raw)
   #    if verbose

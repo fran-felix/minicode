@@ -96,18 +96,39 @@ class Validator():
     return self.transition(State.SPECIFIED)
 
   def specified_to_planned(self) -> bool:
-    ...
+    if self.current != State.SPECIFIED:
+      return False
+
+    return self.transition(State.PLANNED)
 
   def planned_to_implementing(self) -> bool:
-    ...
+    if self.current != State.PLANNED:
+      return False
+
+    return self.transition(State.IMPLEMENTING)
 
   def implementing_to_verifying(self) -> bool:
-    ...
+    if self.current != State.IMPLEMENTING:
+      return False
+    
+    return self.transition(State.VERIFYING)
 
   def verifying_to_done(self) -> bool:
-    ...
+    if self.current != State.VERIFYING:
+      return False
+    
+    return self.transition(State.DONE)
 
   def verifying_to_repairing(self) -> bool:
-    ...
+    if self.current != State.VERIFYING:
+      return False
+    
+    return self.transition(State.REPAIRING)
+
+  def done(self):
+    if self.current == State.DONE:
+      return True
+    else:
+      return False
 
 # TODO métodos de validação pra cada transição

@@ -16,4 +16,7 @@ def main() -> None:
     validator = fsm.Validator(client)
     minicode = agent.MyAgent(model, client, validator)
 
-    print(minicode.agent("Hello."))
+    print(minicode.agent(task="Hello."))
+
+if __name__ == "__main__":
+    main()
