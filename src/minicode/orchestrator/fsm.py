@@ -86,6 +86,13 @@ class Validator():
 
     return self.transition(State.RECEIVED)
 
-  def received_to_specified(self): ...
+  def received_to_specified(self):
+    
+    return self.transition(State.SPECIFIED)
+
+  def specified_to_planned(self):
+    ...
+
+
 
 # TODO métodos de validação pra cada transição

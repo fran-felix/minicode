@@ -44,6 +44,7 @@ def agent(task, tools=None, max_steps=8, confirm=None, verbose=None, system=None
   # tool schema
   msgs = [{"role": "system", "content": (system or SYSTEM)},
           {"role": "user", "content": task}]
+  inst = None
   
   # last_tool, repeat = None, 0 # guarda contra repetição de chamadas de ferramenta idênticas
   for t in range(1, max_steps + 1):
@@ -56,8 +57,13 @@ def agent(task, tools=None, max_steps=8, confirm=None, verbose=None, system=None
       msgs += [{"role": "assistant", "content": raw}] # add said response to the whole context
 
     elif validator.current != fsm.State.START and validator.current in fsm.State:
+      validator.received_to_specified()
+      inst = "Agora que sei o que devo fazer, preciso planejar um passo a passo para concluir a solução com base nas ferramentas que tenho á disposição."
+      msgs += [{"role": "assistant", "content": inst}]
+
+
       return raw # resposta final
-      continue
+
 
     else:
       raise RuntimeError("Estado inválido.")
