@@ -45,7 +45,7 @@ class HealthStatus(Enum):
 
 # Responsável por verificar as ações do modelo e decidir se é permitido ou não dar seguimento com a execução
 class Validator():
-  def __init__(self, client: OpenAI):
+  def __init__(self, client:OpenAI):
     self.current = State.START
     self.client = client
 
@@ -67,16 +67,19 @@ class Validator():
       return HealthStatus.UNREACHABLE
 
   # Usa as regras definidas em ALLOWED_TRANSITIONS para verificar se uma transição e válida ou não
-  def transition(self, target: State) -> State:
+  def transition(self, target: State) -> bool:
     if target not in ALLOWED_TRANSITIONS[self.current]:
+      proceed = False
       raise ValueError("Transição inválida: "f"{self.current.value} -> {target.value}")
 
     self.current = target
-    return self.current
+    proceed = True
+    #return self.current
+    return proceed
 
-  def start_to_received(self) -> State:
+  def start_to_received(self) -> bool:
     if self.current != State.START:
-      raise RuntimeError(f"Estado atual inválido: {self.current.value}")
+      return False # o agente já passou por esse estágio e está em outra iteração do loop de execução
 
     health = self.check_api_health()
 
@@ -86,13 +89,25 @@ class Validator():
 
     return self.transition(State.RECEIVED)
 
-  def received_to_specified(self):
+  def received_to_specified(self) -> bool:
+    if self.current != State.RECEIVED:
+      return False
     
     return self.transition(State.SPECIFIED)
 
-  def specified_to_planned(self):
+  def specified_to_planned(self) -> bool:
     ...
 
+  def planned_to_implementing(self) -> bool:
+    ...
 
+  def implementing_to_verifying(self) -> bool:
+    ...
+
+  def verifying_to_done(self) -> bool:
+    ...
+
+  def verifying_to_repairing(self) -> bool:
+    ...
 
 # TODO métodos de validação pra cada transição
