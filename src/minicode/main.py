@@ -1,8 +1,10 @@
 from openai import OpenAI
 from minicode import agent
-from minicode.orchestrator import fsm
 from dotenv import load_dotenv
 import os
+
+from minicode.orchestrator import fsm
+from minicode.tools import tools
 
 
 load_dotenv()
@@ -16,7 +18,7 @@ def main() -> None:
     validator = fsm.Validator(client)
     minicode = agent.MyAgent(model, client, validator)
 
-    print(minicode.agent(task="Hello."))
+    print(minicode.agent(task="O que tem no arquivo ai_teste.py ? Me devolva o conteúdo do arquivo, apenas isso.", tools=tools.CODETOOLS))
 
 if __name__ == "__main__":
     main()

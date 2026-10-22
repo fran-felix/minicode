@@ -1,7 +1,12 @@
 def json_type(t): 
   return {"type": t} if isinstance(t, str) else t
-#def nome_tipo(t):
-#  return t if isinstance(t, str) else f"lista de {t['items']['type']}s"
+
+def name_type(t):
+  return t if isinstance(t, str) else f"lista de {t['items']['type']}s"
+
+def document(fs):
+    return "\n".join(f"- {n}({', '.join(f'{p}: {name_type(t)}' for p, t in f['params'].items())}) -> {f['doc']}"
+                     for n, f in fs.items())
 
 def schema(fs):
     props = {}
