@@ -50,6 +50,8 @@ class MyAgent:
   def agent(self, task, available_tools=None, max_steps=8, confirm=None, verbose=True, system=None):
     validator = self.validator
     schema = registry.schema(available_tools)
+    specification_schema = registry.specification_schema()
+    planning_schema = registry.planning_schema(available_tools)
 
     msgs = [{"role": "system", "content": (system or SYSTEM).format(catalog=registry.document(available_tools))},
             {"role": "user", "content": task}]
@@ -64,28 +66,46 @@ class MyAgent:
 
       if validator.current == fsm.State.START:
         validator.start_to_received()
-        raw = self.chat(msgs, response_format={"type": "json_schema", "json_schema": {"name": "action", "schema": schema}})
-        msgs += [{"role": "assistant", "content": raw}]
-        
-        if verbose: print(f" <o>! {raw}")
 
       if validator.current == fsm.State.RECEIVED:
         # especificar a tarefa
-        msgs += [{"role": "assistant", "content": "Preciso fazer uma especificação do desejo do usuário, " +
-                "colhendo requisitos, parâmetros e possíveis operações que terei de realizar."}]
-        raw = self.chat(msgs, response_format={"type": "json_schema", "json_schema": {"name": "action", "schema": schema}})
+        msgs += [{"role": "user", "content": (
+          "Produza somente uma especificação estruturada da tarefa. "
+          "Não chame ferramentas e não invente informações. "
+          "Liste em unknowns tudo que for necessário mas não estiver disponível."
+        )}]
+        raw = self.chat(
+          msgs,
+          response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "specification", "schema": specification_schema}
+          }
+        )
         msgs += [{"role": "assistant", "content": raw}]
-        validator.received_to_specified()
+        specification = self._load_json_object(raw, "especificação")
+        self._validate_specification(specification)
+        validator.received_to_specified(specification)
 
         if verbose: print(f" <o>! {raw}")
-        # TODO verificar se ele não chama ferramentas erradas aqui
-        # TODO pedir mais informação deveria ser uma tool, pra parar o fluxo de execução e ler um input
 
       if validator.current == fsm.State.SPECIFIED:
-        msgs += [{"role": "assistant", "content": "Preciso bolar um passo a passo ANTES de agir, explicando minha linha de pensamento em detalhes."}]
-        raw = self.chat(msgs, response_format={"type": "json_schema", "json_schema": {"name": "action", "schema": schema}})
+        msgs += [{"role": "user", "content": (
+          "Com base na especificação anterior, produza somente um plano de ação "
+          "executável. Cada passo deve usar no máximo uma ferramenta registrada, "
+          "declarar sua observação esperada e como será verificado. "
+          "Não revele raciocínio interno detalhado."
+        )}]
+        raw = self.chat(
+          msgs,
+          response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "action_plan", "schema": planning_schema}
+          }
+        )
         msgs += [{"role": "assistant", "content": raw}]
-        validator.specified_to_planned()
+        plan = self._load_json_object(raw, "plano")
+        self._validate_plan(plan, available_tools)
+        validator.specified_to_planned(plan)
 
         if verbose: print(f" <o>! {raw}")
 
@@ -101,17 +121,17 @@ class MyAgent:
         else:
           action = json.loads(raw)
 
-        print(f"[{t}] <o> {action["thought"]}")
+        print(f"[{t}] <o> {action['thought']}")
         # Verifica se o agente está pronto para responder e retorna se for de fato a resposta final
         if action["tool"] == "answer":
           answer = action["arguments"].get("text", "")
           validator.implementing_to_verifying()
 
         obs = tools.execute(action, available_tools, confirm)
-        if verbose: print(f" <o>! {action["tool"]}({action["arguments"]})\n < o>: {tools.short(obs, 260)}")
+        if verbose: print(f" <o>! {action['tool']}({action['arguments']})\n < o>: {tools.short(obs, 260)}")
 
         # Controle de repetição de chamadas de ferramenta
-        curr_tool = (action["tool"], json.dumps(action["arguments"], sort_keys=True))
+        curr_tool = (action['tool'], json.dumps(action['arguments'], sort_keys=True))
         repeat = repeat + 1 if curr_tool == last_tool else 0
         last_tool = curr_tool
 
@@ -141,3 +161,54 @@ class MyAgent:
       # outra opção é devolver que o modelo não é capaz de resolver tal tarefa. É, provavelmente isso.
 
     raise RuntimeError(f"Número máximo de iterações alcançado {max_steps}.")
+
+
+  # ----- MÉTODOS ESTÁTICOS GERADOS COM COPILOT -----
+
+  @staticmethod
+  def _load_json_object(raw, label):
+    if not raw:
+      raise ValueError(f"O modelo não retornou uma {label}.")
+    try:
+      value = json.loads(raw)
+    except json.JSONDecodeError as error:
+      raise ValueError(f"A {label} não é JSON válido: {error}") from error
+    if not isinstance(value, dict):
+      raise ValueError(f"A {label} deve ser um objeto JSON.")
+    return value
+
+  @staticmethod
+  def _validate_specification(specification):
+    if not specification["goal"].strip():
+      raise ValueError("A especificação deve conter um objetivo.")
+    if specification["needs_clarification"] != bool(specification["unknowns"]):
+      raise ValueError(
+        "needs_clarification deve ser true quando unknowns não estiver vazio."
+      )
+    if specification["needs_clarification"]:
+      raise ValueError(
+        "A especificação ainda possui informações desconhecidas: "
+        + "; ".join(specification["unknowns"])
+      )
+    if not specification["acceptance_criteria"]:
+      raise ValueError("A especificação deve conter critérios de aceitação.")
+
+  @staticmethod
+  def _validate_plan(plan, available_tools):
+    if not plan["objective"].strip():
+      raise ValueError("O plano deve conter um objetivo.")
+    tools = set(available_tools or {})
+    tools.add("answer")
+    ids = [step["id"] for step in plan["steps"]]
+    if len(ids) != len(set(ids)):
+      raise ValueError("O plano contém IDs de passos duplicados.")
+    known_ids = set(ids)
+    for step in plan["steps"]:
+      if step["tool"] not in tools:
+        raise ValueError(f"Ferramenta não disponível no plano: {step['tool']}")
+      if any(dependency not in known_ids for dependency in step["depends_on"]):
+        raise ValueError(f"Dependência desconhecida no passo {step['id']}.")
+    if not plan["steps"]:
+      raise ValueError("O plano deve conter pelo menos um passo.")
+    if not plan["verification_steps"]:
+      raise ValueError("O plano deve conter passos de verificação.")
