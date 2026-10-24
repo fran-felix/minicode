@@ -28,12 +28,12 @@ class MyAgent:
 
   # Envia uma mensagem para o modelo de retorna a resposta
   def chat(self, messages, temperature=0, **kw):
-    resp = self.client.chat.completions.create(
-      model=self.model,
-      messages=messages,
-      temperature=temperature,
-    )
-    return resp.choices[0].message.content
+    return self.client.chat.completions.create(
+        model=self.model,
+        messages=messages,
+        temperature=temperature,
+        **kw,
+    ).choices[0].message.content
 
   def chat_simple(self, messages):
     resp = self.client.chat.completions.create(
@@ -43,20 +43,46 @@ class MyAgent:
       )
     return resp.choices[0].message.content
 
-  # Método que controla o uso de ferramentas
-  def execute(self, fs, confirm=None):
-    # TODO
-    ...
+  # ----- CONTROLE DE FERRAMENTAS -----
+  def mandatory(self, fn):
+    return [p.name for p in inspect.signature(fn).parameters.values() if p.default is inspect.Parameter.empty]
+
+  def execute(self, action, fs, confirm=None):
+    name = action.get("tool")
+    if name not in fs:
+      return {"erro": f"ferramenta desconhecida: {name}"}
+
+    spec = fs[name]
+    args = {k: v for k, v in (action.get("arguments") or {}).items() if k in spec["params"]}
+    missing = [p for p in self.mandatory(spec["fn"]) if p not in args]
+
+    if missing:
+      return {"erro": f"faltam argumentos: {missing}"}
+    if spec.get("efeito_colateral"):
+      if confirm is None or not confirm(name, args):
+        return {"erro": "ação com efeito externo NEGADA pelo operador humano; nada foi executado"}
+
+    try:
+      return {"resultado": spec["fn"](**args)}
+    except Exception as e:
+      return {"erro": f"{type(e).__name__}: {e}"}    
+
+  def short(self, obj, limit=900):
+      s = json.dumps(obj, ensure_ascii=False)
+      return s if len(s) <= limit else s[:limit] + f"... (truncado, {len(s)} caracteres)"
 
   # ----- AGENT LOOP -----
-  def agent(self, task, tools=None, max_steps=8, confirm=None, verbose=None, system=None):
+  def agent(self, task, tools=None, max_steps=8, confirm=None, verbose=True, system=None):
     validator = self.validator
     schema = registry.schema(tools)
 
     msgs = [{"role": "system", "content": (system or SYSTEM).format(catalog=registry.document(tools))},
             {"role": "user", "content": task}]
     inst = "Esperando instruções, não faça nada."
-    plan = "Não há um plano de ação, aguarde."
+
+    curr_tool = None
+    last_tool = None
+    repeat = 0
     answer = None
     
     # last_tool, repeat = None, 0 # guarda contra repetição de chamadas de ferramenta idênticas
@@ -66,7 +92,6 @@ class MyAgent:
       if validator.start_to_received(): # RECEIVED: mensagem chegou ao servidor e o modelo está funcional
       # first step of communication, collect response in "raw"
         raw = self.chat(msgs, response_format={"type": "json_schema", "json_schema": {"name": "action", "schema": schema}})
-
         msgs += [{"role": "assistant", "content": raw}] # retroalimentar a resposta ao modelo
 
       elif validator.received_to_specified(): # SPECIFIED: modelo recebeu a tarefa e devolveu a primeira resposta, proceder com raciocínio e planejar
@@ -75,12 +100,13 @@ class MyAgent:
           +"Posso pedir mais informação se achar necessário.")
         # TODO pedir mais informação deveria ser uma tool, pra parar o fluxo de execução e ler um input
         msgs += [{"role": "assistant", "content": inst}]
-        raw = self.chat_simple(msgs)
+        raw = self.chat(msgs)
 
       elif validator.specified_to_planned(): # PLANNED: modelo devolveu um plano válido, começar a implementação
-        plan = self.chat_simple(msgs)
+        plan = self.chat(msgs)
 
-        return plan # resposta final
+
+        #return json.loads(plan) # resposta final
 
       # IMPLEMENTING: executar a implementação planejada após uma certificação do usuário
 
@@ -103,6 +129,31 @@ class MyAgent:
             #if action["tool"] == "answer":
             #  return action["arguments"].get("text", "")'''
       
-    raise RuntimeError("Max number of iterations reached.")
-  #    action = json.loads(raw)
-  #    if verbose
+      # isso aqui tem que ser o primeiro check
+      if raw is None:
+        raise RuntimeError("O modelo não retornou uma resposta.")
+      else:
+        action = json.loads(raw)
+      print(f"[{t}] <o>? {action["thought"]}")
+      # Verifica se o agente está pronto para responder e retorna se for de fato a resposta final
+      if action["tool"] == "answer":
+        return action["arguments"].get("text", "")
+
+      obs = self.execute(action, tools, confirm)
+
+      if verbose: print(f" <o>! {action["tool"]}({action["arguments"]})\n < o>: {self.short(obs, 260)}")
+
+      # Controle de repetição de chamadas de ferramenta
+      curr_tool = (action["tool"], json.dumps(action["arguments"], sort_keys=True))
+      repeat = repeat + 1 if curr_tool == last_tool else 0
+      last_tool = curr_tool
+
+      # Erro e retorno de aviso ao agente, informando que ele provavelmente está se repetindo erroneamente
+      if repeat >= 2:
+        raise RuntimeError("Agente interrompido: repetição excessiva de chamadas de função (mais de 3 vezes).")
+      warning = ("\nATENÇÃO: você repetiu a chamada de ferramenta anterior, que falhou. "
+                 "Não repita a mesma chamada, mude os argumentos ou use outra ferramenta.") if repeat else ""
+      msgs += [{"role": "assistant", "content": raw},
+              {"role": "user", "content": "Observação: " + self.short(obs) + warning}]
+      
+    raise RuntimeError(f"Número máximo de iterações alcançado {max_steps}.")
