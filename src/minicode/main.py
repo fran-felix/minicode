@@ -12,13 +12,19 @@ model = 'Qwen/Qwen2.5-14B-Instruct-AWQ'
 url = os.getenv('MINICODE_URL')
 key = os.getenv('MINICODE_KEY')
 
+def confirm_action(name, args):
+    print(f"\nO agente quer executar: {name}({tools.short(args)})")
+    answer = input("Permitir? [s/N] ").strip().lower()
+    return answer in {"s", "sim"}
+
+
 def main() -> None:
     # Definindo o agente e os segmentos da harness
     client = OpenAI(base_url=url, api_key=key)
     validator = fsm.Validator(client)
     minicode = agent.MyAgent(model, client, validator)
 
-    print(f"\n\n {minicode.agent(task="Você poderia escrever um script python que escreve hello world! na saída padrão?", available_tools=tools.CODETOOLS)}")
+    print(f"\n\n {minicode.agent(task="Você poderia escrever um script python que escreve hello world! na saída padrão?", available_tools=tools.CODETOOLS, confirm=confirm_action)}")
 
 if __name__ == "__main__":
     main()
