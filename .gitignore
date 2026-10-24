@@ -219,4 +219,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-teste.py
+
+# ----- COISAS DO PROJETO -----
+# diretório de código do agente
+agent_code/

@@ -4,6 +4,7 @@ import os
 import tempfile
 
 PATH_CODE = "/home/francisco/minicode/agent_code"
+os.makedirs(PATH_CODE, exist_ok=True)
 
 # ----- FERRAMENTAS DO SISTEMA -----
 
