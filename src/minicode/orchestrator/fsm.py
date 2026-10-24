@@ -47,6 +47,7 @@ class HealthStatus(Enum):
 class Validator():
   def __init__(self, client:OpenAI):
     self.current = State.START
+    self.last = None
     self.client = client
 
   def check_api_health(self) -> HealthStatus:
@@ -73,6 +74,7 @@ class Validator():
       raise ValueError("Transição inválida: "f"{self.current.value} -> {target.value}")
 
     self.current = target
+    self.last = self.current
     proceed = True
     #return self.current
     return proceed
