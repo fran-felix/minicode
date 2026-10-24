@@ -74,16 +74,26 @@ class MyAgent:
           "Não chame ferramentas e não invente informações. "
           "Liste em unknowns tudo que for necessário mas não estiver disponível."
         )}]
-        raw = self.chat(
-          msgs,
-          response_format={
-            "type": "json_schema",
-            "json_schema": {"name": "specification", "schema": specification_schema}
-          }
-        )
-        msgs += [{"role": "assistant", "content": raw}]
-        specification = self._load_json_object(raw, "especificação")
-        self._validate_specification(specification)
+        for attempt in range(1, 4):
+          raw = self.chat(
+            msgs,
+            response_format={
+              "type": "json_schema",
+              "json_schema": {"name": "specification", "schema": specification_schema}
+            }
+          )
+          msgs += [{"role": "assistant", "content": raw}]
+          try:
+            specification = self._load_json_object(raw, "especificação")
+            self._validate_specification(specification)
+            break
+          except ValueError as error:
+            if attempt == 3:
+              raise
+            msgs += [{"role": "user", "content": (
+              "A especificação anterior é inválida. Corrija-a e responda somente "
+              f"com o JSON da especificação. Erro de validação: {error}"
+            )}]
         validator.received_to_specified(specification)
 
         if verbose: print(f" <o>! {raw}")

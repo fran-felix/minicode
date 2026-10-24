@@ -18,7 +18,7 @@ def main() -> None:
     validator = fsm.Validator(client)
     minicode = agent.MyAgent(model, client, validator)
 
-    print(f"\n\n {minicode.agent(task="O que tem no arquivo ai_teste.py ? Me devolva o conteúdo do arquivo, apenas isso.", available_tools=tools.CODETOOLS)}")
+    print(f"\n\n {minicode.agent(task="Você poderia escrever um script python que escreve hello world! na saída padrão?", available_tools=tools.CODETOOLS)}")
 
 if __name__ == "__main__":
     main()
