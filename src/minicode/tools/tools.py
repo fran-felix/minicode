@@ -87,9 +87,34 @@ def write_file(file_name: str, position: int, write: str):
     "caracteres_escritos": len(write),
   }
 
+# Cria um arquivo novo no diretório de desenvolvimento. Implementado com ajuda de IA (Copilot)
+def create_file(file_name: str, content: str):
+  if not isinstance(file_name, str) or not file_name:
+    raise ValueError("file_name deve ser um nome de arquivo não vazio.")
+  if not isinstance(content, str):
+    raise TypeError("content deve ser uma string.")
 
-def specify_task(spec: str):
-  return spec
+  root = os.path.realpath(PATH_CODE)
+  path = os.path.realpath(os.path.join(root, file_name))
+  if os.path.commonpath((root, path)) != root:
+    raise ValueError("file_name deve apontar para dentro do diretório de desenvolvimento.")
+  if os.path.exists(path):
+    raise FileExistsError(f"Já existe um arquivo ou diretório com esse nome: {file_name}.")
+
+  try:
+    file_descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+  except FileNotFoundError as error:
+    raise FileNotFoundError(
+      f"O diretório pai não existe para o arquivo: {file_name}."
+    ) from error
+
+  with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="") as file:
+    file.write(content)
+
+  return {
+    "arquivo": file_name,
+    "caracteres_escritos": len(content),
+  }
 
 # Reposta final do agente, saída do loop
 def answer(text):
@@ -99,8 +124,11 @@ CODETOOLS = {
   "list_files":     {"fn": list_files, "doc": "lista dos nomes dos arquivos no diretório de desenvolvimento", "params": {}},
   "read_file":      {"fn": read_file, "doc": "conteúdo de um arquivo no diretório de desenvolvimento, apenas leitura",
                     "params": {"file_name": "string"}},
-  "write_file":     {"fn": write_file, "doc": "insere texto em um arquivo do diretório de desenvolvimento",
+  "write_file":     {"fn": write_file, "doc": "insere texto em um arquivo existente do diretório de desenvolvimento",
                     "params": {"file_name": "string", "position": "number", "write": "string"},
+                    "efeito_colateral": True},
+  "create_file":    {"fn": create_file, "doc": "cria um arquivo novo no diretório de desenvolvimento",
+                    "params": {"file_name": "string", "content": "string"},
                     "efeito_colateral": True},
   "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}}
   # TODO "run_tests":    {"fn": run_tests, "doc": "", "params": {}},
