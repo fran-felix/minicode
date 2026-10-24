@@ -49,6 +49,8 @@ class Validator():
     self.current = State.START
     self.last = None
     self.client = client
+    self.specification = None
+    self.plan = None
 
   def check_api_health(self) -> HealthStatus:
     try:
@@ -73,8 +75,8 @@ class Validator():
       proceed = False
       raise ValueError("Transição inválida: "f"{self.current.value} -> {target.value}")
 
-    self.current = target
     self.last = self.current
+    self.current = target
     proceed = True
     #return self.current
     return proceed
@@ -91,16 +93,20 @@ class Validator():
 
     return self.transition(State.RECEIVED)
 
-  def received_to_specified(self) -> bool:
+  def received_to_specified(self, specification=None) -> bool:
     if self.current != State.RECEIVED:
       return False
-    
+    if not specification:
+      raise ValueError("Não é possível especificar sem uma especificação válida.")
+    self.specification = specification
     return self.transition(State.SPECIFIED)
 
-  def specified_to_planned(self) -> bool:
+  def specified_to_planned(self, plan=None) -> bool:
     if self.current != State.SPECIFIED:
       return False
-
+    if not plan:
+      raise ValueError("Não é possível planejar sem um plano válido.")
+    self.plan = plan
     return self.transition(State.PLANNED)
 
   def planned_to_implementing(self) -> bool:
