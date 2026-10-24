@@ -1,4 +1,7 @@
-import os, json, inspect
+import inspect
+import json
+import os
+import tempfile
 
 PATH_CODE = "/home/francisco/minicode/agent_code"
 
@@ -22,16 +25,67 @@ def read_file(file_name: str):
 
   return data
 
-# Escreve num arquivo existente na posição "position" e devolve uma string dizendo onde escreveu, a partir de qual posição e qual foi a última posição escrita
-def write_file(file_name: str, position: int, write):
-  if file_name not in os.listdir(PATH_CODE):
-    raise FileNotFoundError(f"Não há um arquivo como nome: {file_name}. Use {list_files} para ver os arquivos disponíveis.")
+# Insere texto em um arquivo existente sem descartar o conteúdo que já está nele.
+# Incrementado com uso de ferramenta generativa (Copilot)
+def write_file(file_name: str, position: int, write: str):
+  if not isinstance(file_name, str) or not file_name:
+    raise ValueError("file_name deve ser um nome de arquivo não vazio.")
+  if not isinstance(position, int) or isinstance(position, bool) or position < 0:
+    raise ValueError("position deve ser um inteiro não negativo.")
+  if not isinstance(write, str):
+    raise TypeError("write deve ser uma string.")
 
-  with open(os.path.join(PATH_CODE, file_name), 'w') as f:
-    f.seek(position)
-    end = f.write(write)
+  root = os.path.realpath(PATH_CODE)
+  path = os.path.realpath(os.path.join(root, file_name))
+  if os.path.commonpath((root, path)) != root:
+    raise ValueError("file_name deve apontar para dentro do diretório de desenvolvimento.")
+  if not os.path.isfile(path):
+    raise FileNotFoundError(
+      f"Não há um arquivo com esse nome: {file_name}. Use list_files para "
+      "ver os arquivos disponíveis."
+    )
 
-  return {f"Escrito em {file_name}, da posição {position} até {position + end}."}
+  with open(path, "r", encoding="utf-8", newline="") as file:
+    original = file.read()
+
+  if position > len(original):
+    raise ValueError(
+      f"position ({position}) está além do fim do arquivo ({len(original)})."
+    )
+
+  updated = original[:position] + write + original[position:]
+  directory = os.path.dirname(path)
+  mode = os.stat(path).st_mode
+  temporary_path = None
+  try:
+    with tempfile.NamedTemporaryFile(
+      mode="w",
+      encoding="utf-8",
+      newline="",
+      dir=directory,
+      prefix=f".{os.path.basename(path)}.",
+      delete=False,
+    ) as temporary:
+      temporary_path = temporary.name
+      temporary.write(updated)
+      temporary.flush()
+      os.fsync(temporary.fileno())
+    os.chmod(temporary_path, mode)
+    os.replace(temporary_path, path)
+  except Exception:
+    if temporary_path is not None:
+      try:
+        os.unlink(temporary_path)
+      except FileNotFoundError:
+        pass
+    raise
+
+  return {
+    "arquivo": file_name,
+    "posição_inicial": position,
+    "posição_final": position + len(write),
+    "caracteres_escritos": len(write),
+  }
 
 
 def specify_task(spec: str):
@@ -45,8 +99,9 @@ CODETOOLS = {
   "list_files":     {"fn": list_files, "doc": "lista dos nomes dos arquivos no diretório de desenvolvimento", "params": {}},
   "read_file":      {"fn": read_file, "doc": "conteúdo de um arquivo no diretório de desenvolvimento, apenas leitura",
                     "params": {"file_name": "string"}},
-  "write_file":     {"fn": write_file, "doc": "escreve num arquivo do diretório de desenvolvimento",
-                    "params": {"file_name": "string", "position": "number", "write": "string"}},
+  "write_file":     {"fn": write_file, "doc": "insere texto em um arquivo do diretório de desenvolvimento",
+                    "params": {"file_name": "string", "position": "number", "write": "string"},
+                    "efeito_colateral": True},
   "specify_task":        {"fn": specify_task, "doc": "recebe uma especificação e a devolve formatada", "params": {"spec": "string"}},
   "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}}
   # TODO "run_tests":    {"fn": run_tests, "doc": "", "params": {}},
