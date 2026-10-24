@@ -33,9 +33,13 @@ def write_file(file_name: str, position: int, write):
 
   return {f"Escrito em {file_name}, da posição {position} até {position + end}."}
 
+
+def specify_task(spec: str):
+  return spec
+
 # Reposta final do agente, saída do loop
-#def answer(text):
-#  return text
+def answer(text):
+  return text
 
 CODETOOLS = {
   "list_files":     {"fn": list_files, "doc": "lista dos nomes dos arquivos no diretório de desenvolvimento", "params": {}},
@@ -43,6 +47,8 @@ CODETOOLS = {
                     "params": {"file_name": "string"}},
   "write_file":     {"fn": write_file, "doc": "escreve num arquivo do diretório de desenvolvimento",
                     "params": {"file_name": "string", "position": "number", "write": "string"}},
+  "specify_task":        {"fn": specify_task, "doc": "recebe uma especificação e a devolve formatada", "params": {"spec": "string"}},
+  "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}}
   # TODO "run_tests":    {"fn": run_tests, "doc": "", "params": {}},
 
   # Recomendações do Takashi
@@ -51,7 +57,6 @@ CODETOOLS = {
   #create_file
   #git_diff
   #run_command
-  #"answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}}
 }
 
 
