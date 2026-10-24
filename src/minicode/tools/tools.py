@@ -102,7 +102,6 @@ CODETOOLS = {
   "write_file":     {"fn": write_file, "doc": "insere texto em um arquivo do diretório de desenvolvimento",
                     "params": {"file_name": "string", "position": "number", "write": "string"},
                     "efeito_colateral": True},
-  "specify_task":        {"fn": specify_task, "doc": "recebe uma especificação e a devolve formatada", "params": {"spec": "string"}},
   "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}}
   # TODO "run_tests":    {"fn": run_tests, "doc": "", "params": {}},
 
