@@ -2,7 +2,7 @@ from openai import OpenAI
 import json, re, inspect
 
 from minicode.orchestrator import fsm
-from minicode.tools import registry
+from minicode.tools import registry, tools
 # requests
 # from datetime import datetime
 # from zoneinfo import ZoneInfo, available_timezones
@@ -43,40 +43,13 @@ class MyAgent:
       )
     return resp.choices[0].message.content
 
-  # ----- CONTROLE DE FERRAMENTAS -----
-  def mandatory(self, fn):
-    return [p.name for p in inspect.signature(fn).parameters.values() if p.default is inspect.Parameter.empty]
-
-  def execute(self, action, fs, confirm=None):
-    name = action.get("tool")
-    if name not in fs:
-      return {"erro": f"ferramenta desconhecida: {name}"}
-
-    spec = fs[name]
-    args = {k: v for k, v in (action.get("arguments") or {}).items() if k in spec["params"]}
-    missing = [p for p in self.mandatory(spec["fn"]) if p not in args]
-
-    if missing:
-      return {"erro": f"faltam argumentos: {missing}"}
-    if spec.get("efeito_colateral"):
-      if confirm is None or not confirm(name, args):
-        return {"erro": "ação com efeito externo NEGADA pelo operador humano; nada foi executado"}
-
-    try:
-      return {"resultado": spec["fn"](**args)}
-    except Exception as e:
-      return {"erro": f"{type(e).__name__}: {e}"}    
-
-  def short(self, obj, limit=900):
-      s = json.dumps(obj, ensure_ascii=False)
-      return s if len(s) <= limit else s[:limit] + f"... (truncado, {len(s)} caracteres)"
 
   # ----- AGENT LOOP -----
-  def agent(self, task, tools=None, max_steps=8, confirm=None, verbose=True, system=None):
+  def agent(self, task, available_tools=None, max_steps=8, confirm=None, verbose=True, system=None):
     validator = self.validator
-    schema = registry.schema(tools)
+    schema = registry.schema(available_tools)
 
-    msgs = [{"role": "system", "content": (system or SYSTEM).format(catalog=registry.document(tools))},
+    msgs = [{"role": "system", "content": (system or SYSTEM).format(catalog=registry.document(available_tools))},
             {"role": "user", "content": task}]
     inst = "Esperando instruções, não faça nada."
 
@@ -139,9 +112,9 @@ class MyAgent:
       if action["tool"] == "answer":
         return action["arguments"].get("text", "")
 
-      obs = self.execute(action, tools, confirm)
+      obs = tools.execute(action, available_tools, confirm)
 
-      if verbose: print(f" <o>! {action["tool"]}({action["arguments"]})\n < o>: {self.short(obs, 260)}")
+      if verbose: print(f" <o>! {action["tool"]}({action["arguments"]})\n < o>: {tools.short(obs, 260)}")
 
       # Controle de repetição de chamadas de ferramenta
       curr_tool = (action["tool"], json.dumps(action["arguments"], sort_keys=True))
@@ -154,6 +127,6 @@ class MyAgent:
       warning = ("\nATENÇÃO: você repetiu a chamada de ferramenta anterior, que falhou. "
                  "Não repita a mesma chamada, mude os argumentos ou use outra ferramenta.") if repeat else ""
       msgs += [{"role": "assistant", "content": raw},
-              {"role": "user", "content": "Observação: " + self.short(obs) + warning}]
+              {"role": "user", "content": "Observação: " + tools.short(obs) + warning}]
       
     raise RuntimeError(f"Número máximo de iterações alcançado {max_steps}.")
