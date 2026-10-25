@@ -18,13 +18,22 @@ def confirm_action(name, args):
     return answer in {"s", "sim"}
 
 
+def ask_for_information(question):
+    return input(f"\nO agente precisa saber: {question}\nResposta: ").strip()
+
+
 def main() -> None:
     # Definindo o agente e os segmentos da harness
     client = OpenAI(base_url=url, api_key=key)
     validator = fsm.Validator(client)
     minicode = agent.MyAgent(model, client, validator)
 
-    print(f"\n\n {minicode.agent(task="Você poderia escrever um script python que escreve hello world! na saída padrão?", available_tools=tools.CODETOOLS, confirm=confirm_action)}")
+    minicode.agent(
+        task=None,
+        available_tools=tools.CODETOOLS,
+        confirm=confirm_action,
+        ask=ask_for_information,
+    )
 
 if __name__ == "__main__":
     main()
