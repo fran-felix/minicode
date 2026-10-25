@@ -2,6 +2,7 @@ import inspect
 import json
 import os
 import tempfile
+import subprocess
 
 PATH_CODE = "/home/francisco/minicode/agent_code"
 os.makedirs(PATH_CODE, exist_ok=True)
@@ -121,6 +122,30 @@ def ask_for_information(question: str):
   info = input(question)
   return info
 
+def run_command(command: str, timeout: int = 30):
+  if not command.strip():
+    raise ValueError("command deve ser uma string não vazia.")
+  if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+    raise ValueError("timeout deve ser um inteiro positivo.")
+
+  completed = subprocess.run(
+    command,
+    shell=True,
+    cwd=PATH_CODE,
+    capture_output=True,
+    text=True,
+    timeout=timeout,
+  )
+  return {
+    "comando": command,
+    "codigo_saida": completed.returncode,
+    "stdout": completed.stdout,
+    "stderr": completed.stderr,
+  }
+
+def sem_acao(reason: str):
+  return {"motivo": reason}
+
 # Reposta final do agente, saída do loop
 def answer(text):
   return text
@@ -136,13 +161,14 @@ CODETOOLS = {
                     "params": {"file_name": "string", "content": "string"},
                     "efeito_colateral": True},
   "ask_for_information":  {"fn": ask_for_information, "doc": "pede informação adicional ao usuário", "params": {"question": "string"}},
+  "run_command":    {"fn": run_command, "doc": "executa um comando de verificação no diretório de desenvolvimento", "params": {"command": "string", "timeout": "number"}, "efeito_colateral": True},
+  "nenhuma":        {"fn": sem_acao, "doc": "informa que nenhuma ferramenta disponível pode executar a ação necessária", "params": {"reason": "string"}},
   "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}},
   # TODO "run_tests":    {"fn": run_tests, "doc": "", "params": {}},
 
   # Recomendações do Takashi
   #search_code
   #replace_text
-  #create_file
   #git_diff
   #run_command
 }
