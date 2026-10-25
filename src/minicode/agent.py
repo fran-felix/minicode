@@ -18,6 +18,8 @@ Regras:
 - Se faltar informação, use ask_for_information antes de executar ações dependentes dela.
 - Faça um plano de ação passo a passo antes de executar ferramentas
 - Chame UMA ferramenta por vez e espere a observação antes do próximo passo.
+- Depois de implementar, use run_command para verificar o resultado. Se houver erro, corrija-o antes de responder.
+- Se nenhuma ferramenta puder executar a ação necessária, use tool="nenhuma" com o motivo.
 - Nunca invente dados que uma ferramenta pode fornecer, e nunca calcule de cabeça o que uma ferramenta calcula.
 - Se uma observação trouxer "erro", leia a mensagem e corrija a chamada.
 - Quando tiver tudo, use tool="answer" com arguments={{"text": "<resposta final em português>"}}."""
@@ -159,29 +161,89 @@ class MyAgent:
             action = json.loads(raw)
 
           print(f"[{t}] <o> {action['thought']}")
-          # Verifica se o agente está pronto para responder e retorna se for de fato a resposta final
+          if action["tool"] == "nenhuma":
+            failure = action["arguments"].get("reason", "Nenhuma ferramenta disponível para concluir a ação.")
+            validator.to_failed()
+            continue
+          # A resposta final só é aceita depois da verificação.
           if action["tool"] == "answer":
             answer = action["arguments"].get("text", "")
             validator.implementing_to_verifying()
+          else:
+            obs = tools.execute(action, available_tools, confirm, ask)
+            if verbose: print(f" <o>! {action['tool']}({action['arguments']})\n < o>: {tools.short(obs, 260)}")
 
-          obs = tools.execute(action, available_tools, confirm, ask)
-          if verbose: print(f" <o>! {action['tool']}({action['arguments']})\n < o>: {tools.short(obs, 260)}")
+            curr_tool = (action["tool"], json.dumps(action["arguments"], sort_keys=True))
+            repeat = repeat + 1 if curr_tool == last_tool else 0
+            last_tool = curr_tool
+            if repeat >= 2:
+              raise RuntimeError("Agente interrompido: repetição excessiva de chamadas de função (mais de 3 vezes).")
+            warning = ("\nATENÇÃO: você repetiu a chamada de ferramenta anterior, que falhou. "
+                      "Não repita a mesma chamada, mude os argumentos ou use outra ferramenta.") if repeat else ""
+            msgs += [{"role": "assistant", "content": raw},
+                    {"role": "user", "content": "Observação: " + tools.short(obs) + warning}]
+            continue
 
-          # Controle de repetição de chamadas de ferramenta
-          curr_tool = (action['tool'], json.dumps(action['arguments'], sort_keys=True))
-          repeat = repeat + 1 if curr_tool == last_tool else 0
-          last_tool = curr_tool
+        if validator.current == fsm.State.REPAIRING:
+          msgs += [{"role": "user", "content": (
+            "Um comando de verificação falhou. Corrija o erro usando as ferramentas "
+            "disponíveis. Execute uma única ação de reparo e não responda com answer."
+          )}]
+          raw = self.chat(msgs, response_format={"type": "json_schema", "json_schema": {"name": "repair", "schema": schema}})
+          repair = json.loads(raw)
 
-          # Erro e retorno de aviso ao agente, informando que ele provavelmente está se repetindo erroneamente
-          if repeat >= 2:
-            raise RuntimeError("Agente interrompido: repetição excessiva de chamadas de função (mais de 3 vezes).")
-          warning = ("\nATENÇÃO: você repetiu a chamada de ferramenta anterior, que falhou. "
-                    "Não repita a mesma chamada, mude os argumentos ou use outra ferramenta.") if repeat else ""
+          if repair["tool"] == "nenhuma":
+            failure = repair["arguments"].get("reason", "O agente não conseguiu corrigir o erro detectado.")
+            validator.to_failed()
+            continue
+          if repair["tool"] == "answer":
+            raise RuntimeError("O modelo tentou finalizar sem reparar o erro detectado.")
+          
+          obs = tools.execute(repair, available_tools, confirm, ask)
+          if verbose: print(f" <o>! reparo: {repair['tool']}({repair['arguments']})\n < o>: {tools.short(obs, 260)}")
           msgs += [{"role": "assistant", "content": raw},
-                  {"role": "user", "content": "Observação: " + tools.short(obs) + warning}]
+                  {"role": "user", "content": "Observação do reparo: " + tools.short(obs)}]
+          validator.repairing_to_verifying()
+          continue
 
         if validator.current == fsm.State.VERIFYING:
-          validator.verifying_to_done()
+          msgs += [{"role": "user", "content": (
+            "Verifique a implementação. Use run_command para executar os testes "
+            "ou comandos necessários. Se o comando falhar, aguarde o reparo; "
+            "se tudo estiver correto, use answer."
+          )}]
+          raw = self.chat(msgs, response_format={"type": "json_schema", "json_schema": {"name": "verification", "schema": schema}})
+          verification = json.loads(raw)
+
+          if verification["tool"] == "nenhuma":
+            failure = verification["arguments"].get("reason", "Nenhuma ferramenta disponível para verificar a implementação.")
+            validator.to_failed()
+            continue
+          if verification["tool"] == "answer":
+            answer = verification["arguments"].get("text", answer or "")
+            msgs += [{"role": "assistant", "content": raw}]
+            validator.verifying_to_done()
+            continue
+
+          obs = tools.execute(verification, available_tools, confirm, ask)
+          if verbose: print(f" <o>! verificação: {verification['tool']}({verification['arguments']})\n < o>: {tools.short(obs, 260)}")
+          msgs += [{"role": "assistant", "content": raw},
+                  {"role": "user", "content": "Observação da verificação: " + tools.short(obs)}]
+          result = obs.get("resultado")
+          
+          failed = "erro" in obs or (
+            verification["tool"] == "run_command"
+            and isinstance(result, dict)
+            and result.get("codigo_saida", 1) != 0
+          )
+          if failed:
+            validator.verifying_to_repairing()
+          continue
+
+        if validator.current == fsm.State.FAILED:
+          print(f"\nNão foi possível concluir a tarefa: {failure}")
+          keep_chat = False
+          break
 
         if validator.current == fsm.State.DONE:
           print(f"\n{answer}")
@@ -193,9 +255,8 @@ class MyAgent:
           break
 
       else:
-        raise RuntimeError(
-            f"Número máximo de iterações alcançado {max_steps}."
-        )
+        failure = f"Número máximo de iterações alcançado ({max_steps})."
+        validator.to_failed()
     
     print("\n<o> Espero ter ajudado!")
 

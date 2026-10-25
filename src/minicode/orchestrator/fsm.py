@@ -133,6 +133,18 @@ class Validator():
     
     return self.transition(State.REPAIRING)
 
+  def repairing_to_verifying(self) -> bool:
+    if self.current != State.REPAIRING:
+      return False
+
+    return self.transition(State.VERIFYING)
+
+  def to_failed(self) -> bool:
+    if self.current == State.FAILED:
+      return False
+
+    return self.transition(State.FAILED)
+
   def done(self):
     if self.current == State.DONE:
       return True
