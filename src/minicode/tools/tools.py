@@ -117,6 +117,10 @@ def create_file(file_name: str, content: str):
     "caracteres_escritos": len(content),
   }
 
+def ask_for_information(question: str):
+  info = input(question)
+  return info
+
 # Reposta final do agente, saída do loop
 def answer(text):
   return text
@@ -131,7 +135,8 @@ CODETOOLS = {
   "create_file":    {"fn": create_file, "doc": "cria um arquivo novo no diretório de desenvolvimento",
                     "params": {"file_name": "string", "content": "string"},
                     "efeito_colateral": True},
-  "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}}
+  "ask_for_information":  {"fn": ask_for_information, "doc": "pede informação adicional ao usuário", "params": {"question": "string"}},
+  "answer":         {"fn": answer, "doc": "resposta final do agente", "params": {"text": "string"}},
   # TODO "run_tests":    {"fn": run_tests, "doc": "", "params": {}},
 
   # Recomendações do Takashi
@@ -148,7 +153,7 @@ CODETOOLS = {
 def mandatory(fn):
   return [p.name for p in inspect.signature(fn).parameters.values() if p.default is inspect.Parameter.empty]
 
-def execute(action, fs, confirm=None):
+def execute(action, fs, confirm=None, ask=None):
   name = action.get("tool")
   if name not in fs:
     return {"erro": f"ferramenta desconhecida: {name}"}
@@ -159,6 +164,11 @@ def execute(action, fs, confirm=None):
 
   if missing:
     return {"erro": f"faltam argumentos: {missing}"}
+  if name == "ask_for_information" and ask is not None:
+    try:
+      return {"resultado": ask(**args)}
+    except Exception as e:
+      return {"erro": f"{type(e).__name__}: {e}"}
   if spec.get("efeito_colateral"):
     if confirm is None or not confirm(name, args):
       return {"erro": "ação com efeito externo NEGADA pelo operador humano; nada foi executado"}
