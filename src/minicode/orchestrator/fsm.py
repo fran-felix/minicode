@@ -31,7 +31,7 @@ ALLOWED_TRANSITIONS = {
     State.FAILED,
   },
   State.REPAIRING: {State.VERIFYING, State.FAILED},
-  State.DONE: set(),
+  State.DONE: {State.START},
   State.FAILED: set(),
 }
 
@@ -139,4 +139,19 @@ class Validator():
     else:
       return False
 
-# TODO métodos de validação pra cada transição
+  def done_to_start(self) -> bool:
+    if self.current != State.DONE:
+      return False
+
+    return self.transition(State.START)
+
+  def ask_to_continue(self) -> bool:
+    while True:
+      response = input("Deseja encerrar a conversa? [S/n] ").strip().lower()
+      
+      if response in {"", "s", "sim"}:
+        return False
+      elif response in {"n", "nao", "não"}:
+        return True
+
+      print("\nResposta inválida. Digite S ou N: ")
