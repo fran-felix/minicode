@@ -17,7 +17,6 @@ def confirm_action(name, args):
     answer = input("Permitir? [s/N] ").strip().lower()
     return answer in {"s", "sim"}
 
-
 def ask_for_information(question):
     return input(f"\nO agente precisa saber: {question}\nResposta: ").strip()
 
