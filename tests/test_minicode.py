@@ -89,6 +89,8 @@ class MetricsTests(unittest.TestCase):
 
 
 class AgentPipelineTests(unittest.TestCase):
+    runs = []
+
     @unittest.skipUnless(
         os.getenv("RUN_MINICODE_INTEGRATION") == "1"
         and os.getenv("MINICODE_URL")
@@ -101,7 +103,7 @@ class AgentPipelineTests(unittest.TestCase):
         agent = MyAgent(main.model, client, validator)
         try:
             with patch("builtins.input", side_effect=[task, "s"]):
-                agent.agent(
+                metrics = agent.agent(
                     task=None,
                     available_tools=tools.CODETOOLS,
                     confirm=lambda name, args: True,
@@ -114,34 +116,44 @@ class AgentPipelineTests(unittest.TestCase):
                 file_path = os.path.join(tools.PATH_CODE, file_name)
                 if os.path.isfile(file_path):
                     os.unlink(file_path)
-        return validator
+        self.runs.append(metrics)
+        print(f"\nMétricas da tarefa: {metrics.as_dict()}")
+        return validator, metrics
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.runs:
+            print(f"\nMétricas agregadas: {summarize(cls.runs).as_dict()}")
 
     def test_successful_implementation_reaches_done_and_returns_to_start(self):
         file_name = f"integration_success_{uuid4().hex}.py"
-        validator = self.run_agent(
+        validator, metrics = self.run_agent(
             f"Crie um arquivo {file_name} contendo uma função hello que retorna 'ok'. "
             "Execute um teste simples para verificar o arquivo."
             , cleanup=(file_name,)
         )
         self.assertEqual(validator.current, State.START)
+        self.assertTrue(metrics.success)
 
     def test_agent_can_request_additional_information(self):
         file_name = f"integration_information_{uuid4().hex}.py"
-        validator = self.run_agent(
+        validator, metrics = self.run_agent(
             f"Crie um arquivo {file_name} com uma função cujo nome e comportamento "
             "devem ser perguntados ao usuário antes da implementação."
             , cleanup=(file_name,)
         )
         self.assertEqual(validator.current, State.START)
+        self.assertTrue(metrics.success)
 
     def test_failed_verification_enters_repair_and_verifies_again(self):
         file_name = f"integration_repair_{uuid4().hex}.py"
-        validator = self.run_agent(
+        validator, metrics = self.run_agent(
             f"Crie um arquivo {file_name} com um teste inicialmente falhando, "
             "execute o teste, corrija o erro e execute-o novamente."
             , cleanup=(file_name,)
         )
         self.assertEqual(validator.current, State.START)
+        self.assertTrue(metrics.success)
 
     def test_no_action_reaches_failed(self):
         self.skipTest("cenário depende de o modelo reconhecer uma ação sem ferramenta")
