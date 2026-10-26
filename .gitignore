@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# ----- COISAS DO PROJETO -----
+# diretório de código do agente
+agent_code/
