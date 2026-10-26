@@ -3,6 +3,7 @@ import json, re, inspect
 
 from minicode.orchestrator import fsm
 from minicode.tools import registry, tools
+from minicode.metrics import AgentMetrics
 # requests
 # from datetime import datetime
 # from zoneinfo import ZoneInfo, available_timezones
@@ -30,9 +31,11 @@ class MyAgent:
     self.model = model
     self.client = client
     self.validator = validator
+    self.last_metrics = None
 
   # Envia uma mensagem para o modelo de retorna a resposta
   def chat(self, messages, temperature=0, **kw):
+    self._metrics.llm_calls += 1
     return self.client.chat.completions.create(
         model=self.model,
         messages=messages,
@@ -41,6 +44,7 @@ class MyAgent:
     ).choices[0].message.content
 
   def chat_simple(self, messages):
+    self._metrics.llm_calls += 1
     resp = self.client.chat.completions.create(
       model=self.model,
       messages=messages,
@@ -51,6 +55,8 @@ class MyAgent:
   # ----- AGENT LOOP -----
   def agent(self, task, available_tools=None, max_steps=8, confirm=None, ask=None, verbose=True, system=None):
     task = task or ""
+    self._metrics = AgentMetrics()
+    self.last_metrics = self._metrics
 
     validator = self.validator
     schema = registry.schema(available_tools)
@@ -70,6 +76,7 @@ class MyAgent:
     
       # last_tool, repeat = None, 0 # guarda contra repetição de chamadas de ferramenta idênticas
       for t in range(1, max_steps + 1):
+        self._metrics.iterations += 1
 
         if validator.current == fsm.State.START:
           task_in = input("Converse com Minicode: ").strip()
@@ -171,6 +178,7 @@ class MyAgent:
             validator.implementing_to_verifying()
           else:
             obs = tools.execute(action, available_tools, confirm, ask)
+            self._metrics.tool_calls += 1
             if verbose: print(f" <o>! {action['tool']}({action['arguments']})\n < o>: {tools.short(obs, 260)}")
 
             curr_tool = (action["tool"], json.dumps(action["arguments"], sort_keys=True))
@@ -185,6 +193,7 @@ class MyAgent:
             continue
 
         if validator.current == fsm.State.REPAIRING:
+          self._metrics.repair_count += 1
           msgs += [{"role": "user", "content": (
             "Um comando de verificação falhou. Corrija o erro usando as ferramentas "
             "disponíveis. Execute uma única ação de reparo e não responda com answer."
@@ -200,6 +209,7 @@ class MyAgent:
             raise RuntimeError("O modelo tentou finalizar sem reparar o erro detectado.")
           
           obs = tools.execute(repair, available_tools, confirm, ask)
+          self._metrics.tool_calls += 1
           if verbose: print(f" <o>! reparo: {repair['tool']}({repair['arguments']})\n < o>: {tools.short(obs, 260)}")
           msgs += [{"role": "assistant", "content": raw},
                   {"role": "user", "content": "Observação do reparo: " + tools.short(obs)}]
@@ -226,6 +236,7 @@ class MyAgent:
             continue
 
           obs = tools.execute(verification, available_tools, confirm, ask)
+          self._metrics.tool_calls += 1
           if verbose: print(f" <o>! verificação: {verification['tool']}({verification['arguments']})\n < o>: {tools.short(obs, 260)}")
           msgs += [{"role": "assistant", "content": raw},
                   {"role": "user", "content": "Observação da verificação: " + tools.short(obs)}]
@@ -241,11 +252,14 @@ class MyAgent:
           continue
 
         if validator.current == fsm.State.FAILED:
+          self._metrics.failure_reason = failure
           print(f"\nNão foi possível concluir a tarefa: {failure}")
           keep_chat = False
           break
 
         if validator.current == fsm.State.DONE:
+          self._metrics.success = True
+          self._metrics.first_attempt_success = self._metrics.repair_count == 0
           print(f"\n{answer}")
           keep_chat = validator.ask_to_continue()
           if not keep_chat:
@@ -256,9 +270,11 @@ class MyAgent:
 
       else:
         failure = f"Número máximo de iterações alcançado ({max_steps})."
+        self._metrics.failure_reason = failure
         validator.to_failed()
     
     print("\n<o> Espero ter ajudado!")
+    return self._metrics
 
   # ----- MÉTODOS ESTÁTICOS GERADOS COM COPILOT -----
 
