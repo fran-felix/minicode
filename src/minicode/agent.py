@@ -233,23 +233,22 @@ class MyAgent:
             answer = verification["arguments"].get("text", answer or "")
             msgs += [{"role": "assistant", "content": raw}]
             validator.verifying_to_done()
+          else:
+            obs = tools.execute(verification, available_tools, confirm, ask)
+            self._metrics.tool_calls += 1
+            if verbose: print(f" <o>! verificação: {verification['tool']}({verification['arguments']})\n < o>: {tools.short(obs, 260)}")
+            msgs += [{"role": "assistant", "content": raw},
+                    {"role": "user", "content": "Observação da verificação: " + tools.short(obs)}]
+            result = obs.get("resultado")
+            
+            failed = "erro" in obs or (
+              verification["tool"] == "run_command"
+              and isinstance(result, dict)
+              and result.get("codigo_saida", 1) != 0
+            )
+            if failed:
+              validator.verifying_to_repairing()
             continue
-
-          obs = tools.execute(verification, available_tools, confirm, ask)
-          self._metrics.tool_calls += 1
-          if verbose: print(f" <o>! verificação: {verification['tool']}({verification['arguments']})\n < o>: {tools.short(obs, 260)}")
-          msgs += [{"role": "assistant", "content": raw},
-                  {"role": "user", "content": "Observação da verificação: " + tools.short(obs)}]
-          result = obs.get("resultado")
-          
-          failed = "erro" in obs or (
-            verification["tool"] == "run_command"
-            and isinstance(result, dict)
-            and result.get("codigo_saida", 1) != 0
-          )
-          if failed:
-            validator.verifying_to_repairing()
-          continue
 
         if validator.current == fsm.State.FAILED:
           self._metrics.failure_reason = failure
