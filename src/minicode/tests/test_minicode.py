@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from minicode.agent import MyAgent
 from minicode import main
-from minicode.metrics import AgentMetrics, summarize
+from minicode.tests.metrics import AgentMetrics, summarize
 from minicode.orchestrator.fsm import ALLOWED_TRANSITIONS, State, Validator
 from minicode.tools import registry, tools
 

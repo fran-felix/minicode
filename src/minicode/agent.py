@@ -3,7 +3,7 @@ import json, re, inspect
 
 from minicode.orchestrator import fsm
 from minicode.tools import registry, tools
-from minicode.metrics import AgentMetrics
+from minicode.tests.metrics import AgentMetrics
 # requests
 # from datetime import datetime
 # from zoneinfo import ZoneInfo, available_timezones
